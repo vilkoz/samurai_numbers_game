@@ -90,7 +90,8 @@ class Game:
         self.game_state = GameState.PLAYER_TURN
         self.flip_start_time = None
         self.highlight_rows = False
-        self.current_player = self.players[0]
+        self.current_player_index = 0
+        self.current_player = self.players[self.current_player_index]
 
     def setup_game(self, num_players):
         numbers = list(range(1, NUM_CARDS + 1))
@@ -180,6 +181,8 @@ class Game:
         if self.game_state == GameState.PLACE_CARD:
             if not self.highlight_rows:
                 self.place_card_in_rows(self.selected_card)
+                self.current_player_index = (self.current_player_index + 1) % len(self.players)
+                self.current_player = self.players[self.current_player_index]
                 self.game_state = GameState.PLAYER_TURN
 
     def render(self):
