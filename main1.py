@@ -39,7 +39,6 @@ class Card:
     def draw_back(self, x, y):
         pygame.draw.rect(screen, BLUE, (x, y, CARD_WIDTH, CARD_HEIGHT))
 
-
 # Player class
 class Player:
     def __init__(self, name):
@@ -57,8 +56,8 @@ class Bot(Player):
         super().__init__(name)
 
     def make_move(self, rows):
-        # AI logic for bot moves
-        pass
+        # AI logic for bot moves (random for now)
+        return random.choice(self.cards)
 
     def draw_back_of_cards(self, x, y):
         for i in range(len(self.cards)):
@@ -105,11 +104,21 @@ def select_num_players():
 def main():
     num_players = select_num_players()
     players, rows = setup_game(num_players)
+    selected_card = None
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left mouse button
+                    x, y = event.pos
+                    for i, card in enumerate(players[0].cards):
+                        card_x = 50 + i * (CARD_WIDTH + 10)
+                        card_y = 50
+                        if card_x <= x <= card_x + CARD_WIDTH and card_y <= y <= card_y + CARD_HEIGHT:
+                            selected_card = players[0].cards.pop(i)
+                            break
 
         screen.fill(BLACK)
         players[0].draw_cards(50, 50)  # Draw only the human player's cards
@@ -122,6 +131,10 @@ def main():
         for i, row in enumerate(rows):
             for j, card in enumerate(row):
                 card.draw(200 + i * (CARD_WIDTH + 10), 300 + j * (CARD_HEIGHT + 10))
+
+        # Draw selected card face down on the game field
+        if selected_card:
+            selected_card.draw_back(400, 500)
 
         pygame.display.flip()
 
