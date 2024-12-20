@@ -78,6 +78,7 @@ class GameState:
     BOT_TURN = 2
     FLIP_CARDS = 3
     SHOW_RESULTS = 4
+    PLACE_CARD = 5
 
 # Game class
 class Game:
@@ -88,6 +89,8 @@ class Game:
         self.play_zone_cards = []
         self.game_state = GameState.PLAYER_TURN
         self.flip_start_time = None
+        self.highlight_rows = False
+        self.current_player = self.players[0]
 
     def setup_game(self, num_players):
         numbers = list(range(1, NUM_CARDS + 1))
@@ -124,12 +127,28 @@ class Game:
                         selecting = False
         return num_players + 1  # Including the human player
 
+    def place_card_in_rows(self, card):
+        possible_rows = [row for row in self.rows if card.number > row[-1].number]
+        if possible_rows:
+            # Find the row with the minimal difference to the last card
+            best_row = min(possible_rows, key=lambda row: card.number - row[-1].number)
+            best_row.append(card)
+        else:
+            # No suitable row, player must select a row to take all cards
+            if isinstance(self.current_player, Player):  # Human player
+                self.highlight_rows = True
+            else:  # Bot player
+                selected_row = random.choice(self.rows)
+                self.current_player.point_stack += sum(c.points for c in selected_row)
+                selected_row.clear()
+                selected_row.append(card)
+
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-            elif event.type == pygame.MOUSEBUTTONDOWN and self.game_state == GameState.PLAYER_TURN:
-                if event.button == 1:  # Left mouse button
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if self.game_state == GameState.PLAYER_TURN and event.button == 1:
                     self.selected_card = self.players[0].select_card(event.pos)
                     if self.selected_card:
                         self.play_zone_cards.append(self.selected_card)
@@ -137,20 +156,35 @@ class Game:
                             self.play_zone_cards.append(bot.make_move(self.rows))
                         self.game_state = GameState.FLIP_CARDS
                         self.flip_start_time = pygame.time.get_ticks()
+                elif self.game_state == GameState.PLACE_CARD and event.button == 1:
+                    if self.highlight_rows:
+                        for i, row in enumerate(self.rows):
+                            if self.is_row_clicked(row, event.pos):
+                                self.current_player.point_stack += sum(c.points for c in row)
+                                row.clear()
+                                row.append(self.selected_card)
+                                self.highlight_rows = False
+                                self.game_state = GameState.PLAYER_TURN
+                                break
         return True
 
     def update(self):
         if self.game_state == GameState.FLIP_CARDS:
             current_time = pygame.time.get_ticks()
-            if current_time - self.flip_start_time > 1000:  # 1 second delay before flipping
+            if current_time - self.flip_start_time > 1000:
                 self.game_state = GameState.SHOW_RESULTS
 
         if self.game_state == GameState.SHOW_RESULTS:
-            self.game_state = GameState.PLAYER_TURN
+            self.game_state = GameState.PLACE_CARD
+
+        if self.game_state == GameState.PLACE_CARD:
+            if not self.highlight_rows:
+                self.place_card_in_rows(self.selected_card)
+                self.game_state = GameState.PLAYER_TURN
 
     def render(self):
         screen.fill(BLACK)
-        self.players[0].draw_cards(50, 50)  # Draw only the human player's cards
+        self.players[0].draw_cards(50, 50)
 
         # Draw bot cards (back side)
         for i, player in enumerate(self.players[1:]):
@@ -168,18 +202,33 @@ class Game:
         # Handle game states
         if self.game_state == GameState.FLIP_CARDS:
             current_time = pygame.time.get_ticks()
-            if current_time - self.flip_start_time > 1000:  # 1 second delay before flipping
+            if current_time - self.flip_start_time > 1000:
                 self.game_state = GameState.SHOW_RESULTS
 
         if self.game_state == GameState.SHOW_RESULTS:
             for i, card in enumerate(self.play_zone_cards):
                 card.draw(400 + i * (CARD_WIDTH + 10), 500)
             pygame.display.flip()
-            pygame.time.wait(2000)  # Show the cards for 2 seconds
+            pygame.time.wait(2000)
             self.play_zone_cards.clear()
-            self.game_state = GameState.PLAYER_TURN
+            self.game_state = GameState.PLACE_CARD
+
+        if self.highlight_rows:
+            for row in self.rows:
+                self.highlight_row(row)
 
         pygame.display.flip()
+
+    def is_row_clicked(self, row, pos):
+        x, y = pos
+        row_x = 200 + self.rows.index(row) * (CARD_WIDTH + 10)
+        row_y = 300
+        return row_x <= x <= row_x + CARD_WIDTH and row_y <= y <= row_y + CARD_HEIGHT * len(row)
+
+    def highlight_row(self, row):
+        row_x = 200 + self.rows.index(row) * (CARD_WIDTH + 10)
+        row_y = 300
+        pygame.draw.rect(screen, GREEN, (row_x, row_y, CARD_WIDTH, CARD_HEIGHT * len(row)), 3)
 
     def run(self):
         running = True
