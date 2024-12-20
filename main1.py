@@ -72,43 +72,6 @@ class Bot(Player):
         for i in range(len(self.cards)):
             self.cards[i].draw_back(x + i * (CARD_WIDTH + 10), y)
 
-# Game setup
-def setup_game(num_players):
-    numbers = list(range(1, NUM_CARDS + 1))
-    random.shuffle(numbers)
-    players = [Player("Human Player")]
-    for i in range(num_players - 1):
-        players.append(Bot(f"Bot {i+1}"))
-    for player in players:
-        for _ in range(CARDS_PER_PLAYER):
-            number = numbers.pop()
-            player.cards.append(Card(number))
-    rows = [[Card(numbers.pop())] for _ in range(4)]
-    return players, rows
-
-# Player selection
-def select_num_players():
-    num_players = 1
-    selecting = True
-    while selecting:
-        screen.fill(BLACK)
-        font = pygame.font.Font(None, 36)
-        text = font.render(f"Select number of bot players (1-9): {num_players}", True, WHITE)
-        screen.blit(text, (50, 50))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and num_players < 9:
-                    num_players += 1
-                elif event.key == pygame.K_DOWN and num_players > 1:
-                    num_players -= 1
-                elif event.key == pygame.K_RETURN:
-                    selecting = False
-    return num_players + 1  # Including the human player
-
 # Game states
 class GameState:
     PLAYER_TURN = 1
@@ -116,64 +79,116 @@ class GameState:
     FLIP_CARDS = 3
     SHOW_RESULTS = 4
 
-# Main game loop
-def main():
-    num_players = select_num_players()
-    players, rows = setup_game(num_players)
-    selected_card = None
-    play_zone_cards = []
-    game_state = GameState.PLAYER_TURN
-    flip_start_time = None
+# Game class
+class Game:
+    def __init__(self):
+        self.num_players = self.select_num_players()
+        self.players, self.rows = self.setup_game(self.num_players)
+        self.selected_card = None
+        self.play_zone_cards = []
+        self.game_state = GameState.PLAYER_TURN
+        self.flip_start_time = None
 
-    running = True
-    while running:
+    def setup_game(self, num_players):
+        numbers = list(range(1, NUM_CARDS + 1))
+        random.shuffle(numbers)
+        players = [Player("Human Player")]
+        for i in range(num_players - 1):
+            players.append(Bot(f"Bot {i+1}"))
+        for player in players:
+            for _ in range(CARDS_PER_PLAYER):
+                number = numbers.pop()
+                player.cards.append(Card(number))
+        rows = [[Card(numbers.pop())] for _ in range(4)]
+        return players, rows
+
+    def select_num_players(self):
+        num_players = 1
+        selecting = True
+        while selecting:
+            screen.fill(BLACK)
+            font = pygame.font.Font(None, 36)
+            text = font.render(f"Select number of bot players (1-9): {num_players}", True, WHITE)
+            screen.blit(text, (50, 50))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_UP and num_players < 9:
+                        num_players += 1
+                    elif event.key == pygame.K_DOWN and num_players > 1:
+                        num_players -= 1
+                    elif event.key == pygame.K_RETURN:
+                        selecting = False
+        return num_players + 1  # Including the human player
+
+    def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == GameState.PLAYER_TURN:
+                return False
+            elif event.type == pygame.MOUSEBUTTONDOWN and self.game_state == GameState.PLAYER_TURN:
                 if event.button == 1:  # Left mouse button
-                    selected_card = players[0].select_card(event.pos)
-                    if selected_card:
-                        play_zone_cards.append(selected_card)
-                        for bot in players[1:]:
-                            play_zone_cards.append(bot.make_move(rows))
-                        game_state = GameState.FLIP_CARDS
-                        flip_start_time = pygame.time.get_ticks()
+                    self.selected_card = self.players[0].select_card(event.pos)
+                    if self.selected_card:
+                        self.play_zone_cards.append(self.selected_card)
+                        for bot in self.players[1:]:
+                            self.play_zone_cards.append(bot.make_move(self.rows))
+                        self.game_state = GameState.FLIP_CARDS
+                        self.flip_start_time = pygame.time.get_ticks()
+        return True
 
-        # Render loop
+    def update(self):
+        if self.game_state == GameState.FLIP_CARDS:
+            current_time = pygame.time.get_ticks()
+            if current_time - self.flip_start_time > 1000:  # 1 second delay before flipping
+                self.game_state = GameState.SHOW_RESULTS
+
+        if self.game_state == GameState.SHOW_RESULTS:
+            self.game_state = GameState.PLAYER_TURN
+
+    def render(self):
         screen.fill(BLACK)
-        players[0].draw_cards(50, 50)  # Draw only the human player's cards
+        self.players[0].draw_cards(50, 50)  # Draw only the human player's cards
 
         # Draw bot cards (back side)
-        for i, player in enumerate(players[1:]):
+        for i, player in enumerate(self.players[1:]):
             player.draw_back_of_cards(50, 150 + i * (CARD_HEIGHT + 10))
 
         # Draw initial rows vertically
-        for i, row in enumerate(rows):
+        for i, row in enumerate(self.rows):
             for j, card in enumerate(row):
                 card.draw(200 + i * (CARD_WIDTH + 10), 300 + j * (CARD_HEIGHT + 10))
 
         # Draw selected cards face down in the play zone
-        for i, card in enumerate(play_zone_cards):
+        for i, card in enumerate(self.play_zone_cards):
             card.draw_back(400 + i * (CARD_WIDTH + 10), 500)
 
         # Handle game states
-        if game_state == GameState.FLIP_CARDS:
+        if self.game_state == GameState.FLIP_CARDS:
             current_time = pygame.time.get_ticks()
-            if current_time - flip_start_time > 1000:  # 1 second delay before flipping
-                game_state = GameState.SHOW_RESULTS
+            if current_time - self.flip_start_time > 1000:  # 1 second delay before flipping
+                self.game_state = GameState.SHOW_RESULTS
 
-        if game_state == GameState.SHOW_RESULTS:
-            for i, card in enumerate(play_zone_cards):
+        if self.game_state == GameState.SHOW_RESULTS:
+            for i, card in enumerate(self.play_zone_cards):
                 card.draw(400 + i * (CARD_WIDTH + 10), 500)
             pygame.display.flip()
             pygame.time.wait(2000)  # Show the cards for 2 seconds
-            play_zone_cards.clear()
-            game_state = GameState.PLAYER_TURN
+            self.play_zone_cards.clear()
+            self.game_state = GameState.PLAYER_TURN
 
         pygame.display.flip()
 
-    pygame.quit()
+    def run(self):
+        running = True
+        while running:
+            running = self.handle_events()
+            self.update()
+            self.render()
+        pygame.quit()
 
 if __name__ == "__main__":
-    main()
+    game = Game()
+    game.run()
