@@ -8,7 +8,7 @@ pygame.init()
 # Window dimensions
 WIDTH, HEIGHT = 1200, 800
 SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Card Placement Game")
+pygame.display.set_caption("Samurai Frog Card Placement Game")
 
 # Fonts
 FONT = pygame.font.SysFont(None, 32)
@@ -34,6 +34,15 @@ penalty_distribution = []
 for v, w in zip(values, weights):
     penalty_distribution.extend([v]*w)
 
+# Load images
+background_img = pygame.image.load("background.png").convert()
+card_back_img = pygame.image.load("card_back.png").convert_alpha()
+
+# Load frog images for each penalty level
+frog_images = {}
+for i in range(1, 7):
+    frog_images[i] = pygame.image.load(f"frog_{i}.png").convert_alpha()
+
 class Card:
     def __init__(self, value, penalty):
         self.value = value
@@ -42,18 +51,35 @@ class Card:
 
     def draw(self, surface, x, y, highlight=False, face_up=True):
         self.rect.topleft = (x,y)
-        color = YELLOW if highlight else WHITE
+        # If face down, show card back image
         if not face_up:
-            # Face-down card: blue back
-            color = BLUE
+            surface.blit(card_back_img, (x, y))
+            # Highlight border if needed
+            if highlight:
+                pygame.draw.rect(surface, YELLOW, self.rect, 2, border_radius=5)
+            else:
+                pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=5)
+            return
+        
+        # Face-up: draw card background as white rectangle
+        color = YELLOW if highlight else WHITE
         pygame.draw.rect(surface, color, self.rect, border_radius=5)
         pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=5)
 
-        if face_up:
-            val_text = FONT.render(str(self.value), True, BLACK)
-            penalty_text = FONT.render(str(self.penalty), True, RED)
-            surface.blit(val_text, (x+CARD_WIDTH//2 - val_text.get_width()//2, y+10))
-            surface.blit(penalty_text, (x+CARD_WIDTH//2 - penalty_text.get_width()//2, y+CARD_HEIGHT-30))
+        # Draw the frog image for this card's penalty
+        frog_img = frog_images.get(self.penalty)
+        if frog_img:
+            # Center the frog image in the middle of the card
+            fw, fh = frog_img.get_width(), frog_img.get_height()
+            fx = x + (CARD_WIDTH - fw)//2
+            fy = y + (CARD_HEIGHT - fh)//2
+            surface.blit(frog_img, (fx, fy))
+
+        # Draw the card value at the top and penalty at the bottom
+        val_text = FONT.render(str(self.value), True, BLACK)
+        penalty_text = FONT.render(str(self.penalty), True, RED)
+        surface.blit(val_text, (x+CARD_WIDTH//2 - val_text.get_width()//2, y+5))
+        surface.blit(penalty_text, (x+CARD_WIDTH//2 - penalty_text.get_width()//2, y+CARD_HEIGHT-30))
 
 class Player:
     def __init__(self, name, is_human=False):
@@ -391,9 +417,11 @@ class Game:
             anim.draw(SCREEN)
 
     def draw(self):
-        SCREEN.fill(GREEN)
+        # Draw the background image
+        SCREEN.blit(background_img, (0,0))
+
         if self.state == "menu":
-            title = BIG_FONT.render("Select number of bots (1-9):", True, WHITE)
+            title = BIG_FONT.render("Select number of bot samurai frogs (1-9):", True, WHITE)
             SCREEN.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//2 - 50))
             info = FONT.render("Press a key from 1 to 9 to select how many bots", True, WHITE)
             SCREEN.blit(info, (WIDTH//2 - info.get_width()//2, HEIGHT//2 + 10))
