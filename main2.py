@@ -23,17 +23,11 @@ YELLOW = (255, 255, 0)
 GRAY = (100, 100, 100)
 BLUE = (0, 0, 200)
 
-# Number of players, 1 human + rest bots
-NUM_PLAYERS = 4
-
 # Cards constants
 CARD_WIDTH = 70
 CARD_HEIGHT = 100
 
-# Generate deck: cards from 1 to 110 with penalty points from 1 to 6, weighted
-# Weighted distribution: let's assume a linear distribution such that:
-# Probability(1) > Probability(2) > ... > Probability(6)
-# For instance: weights = [6,5,4,3,2,1] meaning '1' is most common.
+# Weighted penalty distribution: More 1's than 6's
 weights = [6,5,4,3,2,1]
 values = range(1, 7)
 penalty_distribution = []
@@ -64,7 +58,6 @@ class Player:
 
     def choose_card(self):
         # For bot: choose a random card
-        # For human: This will be handled by GUI events before calling place cards.
         if not self.is_human:
             if self.hand:
                 return random.choice(self.hand)
@@ -91,39 +84,35 @@ class Row:
 
 class Game:
     def __init__(self):
-        self.players = [Player(f"Player {i+1}", is_human=(i==0)) for i in range(NUM_PLAYERS)]
+        self.players = []
         self.rows = [Row() for _ in range(4)]
         self.deck = []
         self.discard = []
-        self.state = "setup" # setup -> play -> round -> pick_row -> leaderboard
+        self.state = "menu" # menu -> setup -> round -> pick_row -> leaderboard
         self.selected_card = None
         self.selected_player = None
         self.selected_row = None
         self.leaderboard = []
-        self.active_players = NUM_PLAYERS
         self.player_cards_placed = {}
-        self.current_player_index = 0
-        self.round_complete = False
-        self.setup_game()
-
-    def setup_game(self):
-        self.generate_deck()
-        self.shuffle_deck()
-        self.start_new_play()
+        self.num_bots = 0
 
     def generate_deck(self):
         self.deck = []
         for v in range(1,111):
-            # Weighted penalty
             penalty = random.choice(penalty_distribution)
             self.deck.append(Card(v, penalty))
 
     def shuffle_deck(self):
         random.shuffle(self.deck)
 
+    def setup_players(self):
+        # First player is human
+        self.players = [Player("Player 1", is_human=True)]
+        for i in range(self.num_bots):
+            self.players.append(Player(f"Bot {i+1}"))
+        self.active_players = len(self.players)
+
     def start_new_play(self):
-        # Deal 10 cards to each player
-        # Place 4 cards in rows
         if len(self.deck) < (10*len(self.get_alive_players())+4):
             # If deck is too small, regenerate and shuffle
             self.generate_deck()
@@ -145,15 +134,12 @@ class Game:
         return len(self.player_cards_placed) == len(alive)
 
     def handle_card_placement(self):
-        # Once all players have chosen a card, we order them by card value and place them
         placements = sorted(self.player_cards_placed.items(), key=lambda x: x[1].value)
         for player, card in placements:
             placed = self.place_card_in_rows(player, card)
             if not placed:
                 # Player must pick a row. If player is human, we must wait for row selection.
-                # For now, choose a row randomly if bot.
                 if player.is_human:
-                    # Wait for user input, highlight all rows for selection
                     self.state = "pick_row"
                     self.selected_card = card
                     self.selected_player = player
@@ -161,16 +147,12 @@ class Game:
                 else:
                     chosen_row = random.choice(self.rows)
                     penalty_cards = chosen_row.reset_with_card(card)
-                    # Add penalty points
                     for c in penalty_cards:
                         player.penalty_points += c.penalty
-        # If we reached here without needing human input, round ends
+                    player.remove_card_from_hand(card)
         self.end_round()
 
     def place_card_in_rows(self, player, card):
-        # Try to place card according to rules:
-        # 1. Card must be greater than last card in row
-        # 2. If multiple possible rows, choose the one with minimal difference
         possible_rows = []
         for r in self.rows:
             if card.value > r.last_card_value:
@@ -181,21 +163,17 @@ class Game:
             diffs.sort(key=lambda x:x[1])
             chosen_row = diffs[0][0]
             chosen_row.add_card(card)
-            # Remove card from player hand
             player.remove_card_from_hand(card)
             return True
         return False
 
     def pick_row_for_player(self, row):
-        # Human player picks a row when no placement possible
         penalty_cards = row.reset_with_card(self.selected_card)
         self.selected_player.remove_card_from_hand(self.selected_card)
         for c in penalty_cards:
             self.selected_player.penalty_points += c.penalty
-        # Reset pick state
         self.selected_card = None
         self.selected_player = None
-        self.state = "round_end_pending"
         self.end_round()
 
     def end_round(self):
@@ -213,19 +191,15 @@ class Game:
             self.state = "leaderboard"
             return
         if not still_have_cards:
-            # start new play
             self.start_new_play()
         else:
-            # new round
             self.player_cards_placed = {}
             self.state = "round"
 
     def update(self, events):
-        # Game state machine
         if self.state == "round":
-            # If all players are bots except human, we must wait for human to pick card via GUI
-            # Bots choose card immediately
             alive_players = self.get_alive_players()
+            # Bots choose if they haven't
             for p in alive_players:
                 if p not in self.player_cards_placed:
                     if not p.is_human:
@@ -234,48 +208,52 @@ class Game:
                             self.player_cards_placed[p] = chosen
             if self.all_players_placed():
                 self.handle_card_placement()
-
         elif self.state == "pick_row":
-            # We are waiting for human to pick a row with a click
-            # This is handled in event section
             pass
+        elif self.state == "setup":
+            # Once setup is done, start the play
+            self.generate_deck()
+            self.shuffle_deck()
+            self.setup_players()
+            self.start_new_play()
 
     def draw(self):
         SCREEN.fill(GREEN)
-        if self.state in ["round", "pick_row", "round_end_pending"]:
-            # Draw players' hands
-            # Draw human player's hand at bottom
+        if self.state == "menu":
+            title = BIG_FONT.render("Select number of bots (1-9):", True, WHITE)
+            SCREEN.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//2 - 50))
+            info = FONT.render("Press a key from 1 to 9 to select how many bots", True, WHITE)
+            SCREEN.blit(info, (WIDTH//2 - info.get_width()//2, HEIGHT//2 + 10))
+
+        elif self.state in ["round", "pick_row", "round_end_pending"]:
+            # Draw player's hand
             human = self.players[0]
             x_start = 50
             y_start = HEIGHT - CARD_HEIGHT - 50
             for i, c in enumerate(human.hand):
                 highlight = False
-                # If it's the round state and human hasn't chosen a card yet, highlight on hover
                 if self.state == "round" and self.players[0] not in self.player_cards_placed:
                     mx, my = pygame.mouse.get_pos()
                     if pygame.Rect(x_start+i*(CARD_WIDTH+5), y_start, CARD_WIDTH, CARD_HEIGHT).collidepoint(mx,my):
                         highlight = True
                 c.draw(SCREEN, x_start+i*(CARD_WIDTH+5), y_start, highlight=highlight)
 
-            # Draw rows in the center
+            # Draw rows
             row_y = HEIGHT//2 - 2*(CARD_HEIGHT+10)
             for i, row in enumerate(self.rows):
                 row_x = WIDTH//2 - 2*(CARD_WIDTH+20) + i*(CARD_WIDTH+100)
-                # Draw row background
                 pygame.draw.rect(SCREEN, GRAY, (row_x, row_y, CARD_WIDTH+40, CARD_HEIGHT+150), border_radius=5)
-                # Draw row cards stacked
                 cy = row_y+10
                 for card in row.cards:
                     card.draw(SCREEN, row_x+20, cy)
                     cy += CARD_HEIGHT//2
-                # If state is pick_row, highlight row if hovered
                 if self.state == "pick_row" and self.selected_player.is_human:
                     mx,my = pygame.mouse.get_pos()
                     rect = pygame.Rect(row_x, row_y, CARD_WIDTH+40, CARD_HEIGHT+150)
                     if rect.collidepoint(mx,my):
                         pygame.draw.rect(SCREEN, YELLOW, rect, 4, border_radius=5)
 
-            # Draw info about players
+            # Draw player info
             info_y = 10
             for p in self.players:
                 color = BLACK
@@ -285,7 +263,6 @@ class Game:
                 SCREEN.blit(txt, (10, info_y))
                 info_y += 30
 
-            # If waiting for pick_row and human player, give instructions
             if self.state == "pick_row":
                 msg = "Select a row to take."
                 txt = BIG_FONT.render(msg, True, BLACK)
@@ -315,26 +292,22 @@ def main():
                 running = False
             elif event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:
-                    # Handle click
-                    mx,my = event.pos
                     if game.state == "round":
-                        # If human hasn't chosen a card yet, allow pick
+                        # Human picks a card
                         human = game.players[0]
                         if human.alive and human not in game.player_cards_placed:
-                            # Check card click
+                            mx, my = event.pos
                             x_start = 50
                             y_start = HEIGHT - CARD_HEIGHT - 50
                             for i, c in enumerate(human.hand):
                                 rect = pygame.Rect(x_start+i*(CARD_WIDTH+5), y_start, CARD_WIDTH, CARD_HEIGHT)
                                 if rect.collidepoint(mx,my):
-                                    # Player chooses this card
                                     game.player_cards_placed[human] = c
-                                    # Check if all placed
                                     if game.all_players_placed():
                                         game.handle_card_placement()
                                     break
                     elif game.state == "pick_row":
-                        # Human must pick a row
+                        mx,my = event.pos
                         row_y = HEIGHT//2 - 2*(CARD_HEIGHT+10)
                         for i, row in enumerate(game.rows):
                             row_x = WIDTH//2 - 2*(CARD_WIDTH+20) + i*(CARD_WIDTH+100)
@@ -345,6 +318,13 @@ def main():
             elif event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
+                if game.state == "menu":
+                    # If user pressed a digit from 1 to 9, set number of bots
+                    if event.unicode.isdigit():
+                        num = int(event.unicode)
+                        if 1 <= num <= 9:
+                            game.num_bots = num
+                            game.state = "setup"
 
         game.update(events)
         game.draw()
