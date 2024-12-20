@@ -109,25 +109,38 @@ def select_num_players():
                     selecting = False
     return num_players + 1  # Including the human player
 
+# Game states
+class GameState:
+    PLAYER_TURN = 1
+    BOT_TURN = 2
+    FLIP_CARDS = 3
+    SHOW_RESULTS = 4
+
 # Main game loop
 def main():
     num_players = select_num_players()
     players, rows = setup_game(num_players)
     selected_card = None
     play_zone_cards = []
+    game_state = GameState.PLAYER_TURN
+    flip_start_time = None
+
     running = True
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == GameState.PLAYER_TURN:
                 if event.button == 1:  # Left mouse button
                     selected_card = players[0].select_card(event.pos)
                     if selected_card:
                         play_zone_cards.append(selected_card)
                         for bot in players[1:]:
                             play_zone_cards.append(bot.make_move(rows))
+                        game_state = GameState.FLIP_CARDS
+                        flip_start_time = pygame.time.get_ticks()
 
+        # Render loop
         screen.fill(BLACK)
         players[0].draw_cards(50, 50)  # Draw only the human player's cards
 
@@ -144,16 +157,21 @@ def main():
         for i, card in enumerate(play_zone_cards):
             card.draw_back(400 + i * (CARD_WIDTH + 10), 500)
 
-        pygame.display.flip()
+        # Handle game states
+        if game_state == GameState.FLIP_CARDS:
+            current_time = pygame.time.get_ticks()
+            if current_time - flip_start_time > 1000:  # 1 second delay before flipping
+                game_state = GameState.SHOW_RESULTS
 
-        # Animate flipping cards in the play zone
-        if len(play_zone_cards) == num_players:
-            pygame.time.wait(1000)  # Wait for 1 second before flipping
+        if game_state == GameState.SHOW_RESULTS:
             for i, card in enumerate(play_zone_cards):
                 card.draw(400 + i * (CARD_WIDTH + 10), 500)
             pygame.display.flip()
-            pygame.time.wait(2000)  # Wait for 2 seconds to show the cards
+            pygame.time.wait(2000)  # Show the cards for 2 seconds
             play_zone_cards.clear()
+            game_state = GameState.PLAYER_TURN
+
+        pygame.display.flip()
 
     pygame.quit()
 
