@@ -177,30 +177,30 @@ class Game:
         self.end_round()
 
     def end_round(self):
-        # Check if all alive players have no cards
-        still_have_cards = any(len(p.hand) > 0 for p in self.get_alive_players())
-
-        # Eliminate players over 60 points
+        # First, eliminate players over 60 points
         for p in self.players:
             if p.alive and p.penalty_points > 60:
                 p.alive = False
                 self.leaderboard.append((p.name, p.penalty_points))
 
-        # Check how many are still alive
+        # Check how many are still alive after elimination
         alive_count = sum(p.alive for p in self.players)
-
         if alive_count == 1:
             # Only one player remains, game ends
             self.state = "leaderboard"
             return
 
+        # Check if all alive players have no cards left
+        still_have_cards = any(len(p.hand) > 0 and p.is_human for p in self.get_alive_players())
         if not still_have_cards:
-            # All alive players have no cards, start a new play
+            # All players are out of cards, start a new play
+
             self.start_new_play()
         else:
-            # Continue the round with remaining cards
+            # Continue the round (players still have cards)
             self.player_cards_placed = {}
             self.state = "round"
+
 
     def update(self, events):
         if self.state == "round":
