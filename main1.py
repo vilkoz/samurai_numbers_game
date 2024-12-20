@@ -66,7 +66,7 @@ class Bot(Player):
 
     def make_move(self, rows):
         # AI logic for bot moves (random for now)
-        return random.choice(self.cards)
+        return self.cards.pop(random.randint(0, len(self.cards) - 1))
 
     def draw_back_of_cards(self, x, y):
         for i in range(len(self.cards)):
@@ -114,6 +114,7 @@ def main():
     num_players = select_num_players()
     players, rows = setup_game(num_players)
     selected_card = None
+    play_zone_cards = []
     running = True
     while running:
         for event in pygame.event.get():
@@ -122,6 +123,10 @@ def main():
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
                     selected_card = players[0].select_card(event.pos)
+                    if selected_card:
+                        play_zone_cards.append(selected_card)
+                        for bot in players[1:]:
+                            play_zone_cards.append(bot.make_move(rows))
 
         screen.fill(BLACK)
         players[0].draw_cards(50, 50)  # Draw only the human player's cards
@@ -135,11 +140,20 @@ def main():
             for j, card in enumerate(row):
                 card.draw(200 + i * (CARD_WIDTH + 10), 300 + j * (CARD_HEIGHT + 10))
 
-        # Draw selected card face down on the game field
-        if selected_card:
-            selected_card.draw_back(400, 500)
+        # Draw selected cards face down in the play zone
+        for i, card in enumerate(play_zone_cards):
+            card.draw_back(400 + i * (CARD_WIDTH + 10), 500)
 
         pygame.display.flip()
+
+        # Animate flipping cards in the play zone
+        if len(play_zone_cards) == num_players:
+            pygame.time.wait(1000)  # Wait for 1 second before flipping
+            for i, card in enumerate(play_zone_cards):
+                card.draw(400 + i * (CARD_WIDTH + 10), 500)
+            pygame.display.flip()
+            pygame.time.wait(2000)  # Wait for 2 seconds to show the cards
+            play_zone_cards.clear()
 
     pygame.quit()
 
