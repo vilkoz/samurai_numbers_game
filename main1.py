@@ -50,6 +50,15 @@ class Player:
         for i, card in enumerate(self.cards):
             card.draw(x + i * (CARD_WIDTH + 10), y)
 
+    def select_card(self, pos):
+        x, y = pos
+        for i, card in enumerate(self.cards):
+            card_x = 50 + i * (CARD_WIDTH + 10)
+            card_y = 50
+            if card_x <= x <= card_x + CARD_WIDTH and card_y <= y <= card_y + CARD_HEIGHT:
+                return self.cards.pop(i)
+        return None
+
 # Bot class
 class Bot(Player):
     def __init__(self, name):
@@ -112,13 +121,7 @@ def main():
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 1:  # Left mouse button
-                    x, y = event.pos
-                    for i, card in enumerate(players[0].cards):
-                        card_x = 50 + i * (CARD_WIDTH + 10)
-                        card_y = 50
-                        if card_x <= x <= card_x + CARD_WIDTH and card_y <= y <= card_y + CARD_HEIGHT:
-                            selected_card = players[0].cards.pop(i)
-                            break
+                    selected_card = players[0].select_card(event.pos)
 
         screen.fill(BLACK)
         players[0].draw_cards(50, 50)  # Draw only the human player's cards
