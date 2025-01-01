@@ -8,16 +8,11 @@ from player import Player, Row
 from animation_manager import AnimationManager
 
 pygame.init()
-
 SCREEN = pygame.display.set_mode((GameConfig.WIDTH, GameConfig.HEIGHT))
 pygame.display.set_caption("Samurai Frog Card Placement Game")
 
-# Load images
-background_img = pygame.image.load("background.png").convert()
-card_back_img = pygame.image.load("card_back_img.png").convert_alpha()
-frog_images = {}
-for i in range(1, 7):
-    frog_images[i] = pygame.image.load(f"frog_{i}.png").convert_alpha()
+GameConfig.init_fonts()
+GameConfig.init_images()
 
 class Game:
     def __init__(self):
@@ -34,6 +29,8 @@ class Game:
         self.num_bots = 0
         self.reveal_timer = 0
         self.animation_manager = AnimationManager(self)
+        self.animation_cards = []
+        self.pending_placements = []
         
     def generate_deck(self):
         self.deck = []
@@ -78,30 +75,66 @@ class Game:
 
     def handle_card_placement_final(self):
         placements = sorted(self.player_cards_placed.items(), key=lambda x: x[1].value)
-        for player, card in placements:
-            placed_row = self.can_place_card_in_rows(card)
-            if not placed_row:
-                if player.is_human:
-                    self.state = "pick_row"
-                    self.selected_card = card
-                    self.selected_player = player
-                    return
+        self.pending_placements = []
+        
+        # Знаходимо ряди з 5 картами
+        full_rows = [row for row in self.rows if len(row.cards) >= 5]
+        
+        if full_rows:
+            # Якщо є повний ряд, гравець з найменшою картою мусить його взяти
+            player, card = placements[0]  # Беремо гравця з найменшою картою
+            self.pending_placements.append((player, card, full_rows[0], True))
+            
+            # Інші гравці розміщують картини за звичайними правилами
+            for player, card in placements[1:]:
+                placed_row = self.can_place_card_in_rows(card)
+                if placed_row:
+                    self.pending_placements.append((player, card, placed_row, False))
                 else:
-                    chosen_row = random.choice(self.rows)
-                    self.pending_placements.append((player, card, chosen_row, True))
-            else:
-                self.pending_placements.append((player, card, placed_row, False))
-
-        self.start_animation()
+                    if player.is_human:
+                        self.state = "pick_row"
+                        self.selected_card = card
+                        self.selected_player = player
+                        return
+                    else:
+                        # Бот вибирає випадковий ряд, крім повних
+                        available_rows = [r for r in self.rows if len(r.cards) < 5]
+                        if not available_rows:
+                            available_rows = self.rows
+                        chosen_row = random.choice(available_rows)
+                        self.pending_placements.append((player, card, chosen_row, True))
+        else:
+            # Якщо немає повних рядів, звичайна логіка розміщення
+            for player, card in placements:
+                placed_row = self.can_place_card_in_rows(card)
+                if placed_row:
+                    self.pending_placements.append((player, card, placed_row, False))
+                else:
+                    if player.is_human:
+                        self.state = "pick_row"
+                        self.selected_card = card
+                        self.selected_player = player
+                        return
+                    else:
+                        chosen_row = random.choice(self.rows)
+                        self.pending_placements.append((player, card, chosen_row, True))
+        
+        # Починаємо анімацію тільки якщо всі картини розміщені
+        if self.pending_placements:
+            self.start_animation()
 
     def can_place_card_in_rows(self, card):
         possible_rows = []
         for r in self.rows:
             if r.last_card_value is None:
                 continue
+            # Якщо в ряду 5 карт, цей ряд не можна вибрати для розміщення
+            if len(r.cards) >= 5:
+                continue
             if card.value > r.last_card_value:
                 possible_rows.append(r)
         if possible_rows:
+            # Знаходимо ряд з мінімальною різницею
             diffs = [(r, card.value - r.last_card_value) for r in possible_rows]
             diffs.sort(key=lambda x: x[1])
             return diffs[0][0]
@@ -219,7 +252,7 @@ class Game:
         self.animation_manager.draw(SCREEN)
 
     def draw(self):
-        SCREEN.blit(background_img, (0, 0))
+        SCREEN.blit(GameConfig.BACKGROUND_IMG, (0, 0))
 
         if self.state == "menu":
             title = GameConfig.BIG_FONT.render("Select number of bot samurai frogs (1-9):", True, GameConfig.WHITE)
