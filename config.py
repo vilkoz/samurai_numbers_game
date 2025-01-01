@@ -28,12 +28,29 @@ class GameConfig:
     ANIMATION_SPEED = 0.05
     
     # Fonts
-    FONT = pygame.font.SysFont(None, 32)
-    BIG_FONT = pygame.font.SysFont(None, 64)
+    FONT = None
+    BIG_FONT = None
+    
+    # Images
+    BACKGROUND_IMG = None
+    CARD_BACK_IMG = None
+    FROG_IMAGES = {}
     
     # Weighted penalty distribution
     PENALTY_WEIGHTS = [6, 5, 4, 3, 2, 1]
     PENALTY_VALUES = range(1, 7)
+    
+    @classmethod
+    def init_fonts(cls):
+        cls.FONT = pygame.font.SysFont(None, 32)
+        cls.BIG_FONT = pygame.font.SysFont(None, 64)
+    
+    @classmethod
+    def init_images(cls):
+        cls.BACKGROUND_IMG = pygame.image.load("background.png").convert()
+        cls.CARD_BACK_IMG = pygame.image.load("card_back.png").convert_alpha()
+        for i in range(1, 7):
+            cls.FROG_IMAGES[i] = pygame.image.load(f"frog_{i}.png").convert_alpha()
     
     @classmethod
     def get_penalty_distribution(cls):

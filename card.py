@@ -10,7 +10,7 @@ class Card:
     def draw(self, surface, x, y, highlight=False, face_up=True):
         self.rect.topleft = (x, y)
         if not face_up:
-            surface.blit(card_back_img, (x, y))
+            surface.blit(GameConfig.CARD_BACK_IMG, (x, y))
             if highlight:
                 pygame.draw.rect(surface, GameConfig.YELLOW, self.rect, 2, border_radius=5)
             else:
@@ -21,7 +21,7 @@ class Card:
         pygame.draw.rect(surface, color, self.rect, border_radius=5)
         pygame.draw.rect(surface, GameConfig.BLACK, self.rect, 2, border_radius=5)
 
-        frog_img = frog_images.get(self.penalty)
+        frog_img = GameConfig.FROG_IMAGES.get(self.penalty)
         if frog_img:
             fw, fh = frog_img.get_width(), frog_img.get_height()
             fx = x + (GameConfig.CARD_WIDTH - fw)//2

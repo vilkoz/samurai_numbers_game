@@ -14,6 +14,35 @@ pygame.display.set_caption("Samurai Frog Card Placement Game")
 GameConfig.init_fonts()
 GameConfig.init_images()
 
+class Button:
+    def __init__(self, x, y, width, height, text, font=None):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.text = text
+        self.font = font or GameConfig.FONT
+        self.is_hovered = False
+        
+    def draw(self, surface):
+        # Визначаємо кольори в залежності від стану
+        bg_color = GameConfig.YELLOW if self.is_hovered else GameConfig.GRAY
+        text_color = GameConfig.BLACK
+        
+        # Малюємо фон кнопки
+        pygame.draw.rect(surface, bg_color, self.rect, border_radius=10)
+        pygame.draw.rect(surface, GameConfig.BLACK, self.rect, 2, border_radius=10)
+        
+        # Малюємо текст
+        text_surface = self.font.render(self.text, True, text_color)
+        text_rect = text_surface.get_rect(center=self.rect.center)
+        surface.blit(text_surface, text_rect)
+        
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.is_hovered = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1 and self.rect.collidepoint(event.pos):
+                return True
+        return False
+
 class Game:
     def __init__(self):
         self.players = []
@@ -31,6 +60,8 @@ class Game:
         self.animation_manager = AnimationManager(self)
         self.animation_cards = []
         self.pending_placements = []
+        self.menu_buttons = []
+        self.setup_menu()
         
     def generate_deck(self):
         self.deck = []
@@ -255,11 +286,13 @@ class Game:
         SCREEN.blit(GameConfig.BACKGROUND_IMG, (0, 0))
 
         if self.state == "menu":
-            title = GameConfig.BIG_FONT.render("Select number of bot samurai frogs (1-9):", True, GameConfig.WHITE)
+            title = GameConfig.BIG_FONT.render("Select number of bot samurai frogs:", True, GameConfig.WHITE)
             SCREEN.blit(title, (GameConfig.WIDTH//2 - title.get_width()//2, GameConfig.HEIGHT//2 - 50))
-            info = GameConfig.FONT.render("Press a key from 1 to 9 to select how many bots", True, GameConfig.WHITE)
-            SCREEN.blit(info, (GameConfig.WIDTH//2 - info.get_width()//2, GameConfig.HEIGHT//2 + 10))
-
+            
+            # Малюємо кнопки
+            for button in self.menu_buttons:
+                button.draw(SCREEN)
+        
         elif self.state in ["round", "pick_row"]:
             self.draw_hand()
             self.draw_rows()
@@ -310,6 +343,20 @@ class Game:
         elif self.state == "animate":
             self.animate_step()
 
+    def setup_menu(self):
+        button_width = 50
+        button_height = 50
+        button_margin = 20
+        total_width = (button_width + button_margin) * 9 - button_margin
+        start_x = (GameConfig.WIDTH - total_width) // 2
+        y = GameConfig.HEIGHT // 2 + 50
+        
+        self.menu_buttons = []
+        for i in range(9):
+            x = start_x + i * (button_width + button_margin)
+            button = Button(x, y, button_width, button_height, str(i + 1))
+            self.menu_buttons.append(button)
+            
 def main():
     clock = pygame.time.Clock()
     game = Game()
@@ -321,7 +368,17 @@ def main():
             if event.type == QUIT:
                 running = False
             elif event.type == MOUSEBUTTONDOWN and event.button == 1:
-                if game.state == "round":
+                if game.state == "menu":
+                    for i, button in enumerate(game.menu_buttons):
+                        if button.handle_event(event):
+                            game.num_bots = i + 1
+                            game.state = "setup"
+                            game.generate_deck()
+                            game.shuffle_deck()
+                            game.setup_players()
+                            game.start_new_play()
+                            break
+                elif game.state == "round":
                     human = game.players[0]
                     if human.alive and human not in game.player_cards_placed:
                         mx, my = event.pos
@@ -344,19 +401,13 @@ def main():
                         if rect.collidepoint(mx, my):
                             game.pick_row_for_player(row)
                             break
+            elif event.type == MOUSEMOTION and game.state == "menu":
+                # Оновлюємо стан наведення для кнопок
+                for button in game.menu_buttons:
+                    button.handle_event(event)
             elif event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
-                if game.state == "menu":
-                    if event.unicode.isdigit():
-                        num = int(event.unicode)
-                        if 1 <= num <= 9:
-                            game.num_bots = num
-                            game.state = "setup"
-                            game.generate_deck()
-                            game.shuffle_deck()
-                            game.setup_players()
-                            game.start_new_play()
             
         game.update(events)
         game.draw()
